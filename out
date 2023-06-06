@@ -1,0 +1,148 @@
+============================= test session starts ==============================
+platform linux -- Python 3.6.9, pytest-6.2.5, py-1.11.0, pluggy-1.0.0
+rootdir: /home/test/remote/test_folder/systemTests
+plugins: html-3.1.1, metadata-1.11.0
+collected 1 item
+
+tests/protocols/test_bgp.py E                                            [100%]
+
+==================================== ERRORS ====================================
+_________________ ERROR at setup of test_can_run_bgp_sessions __________________
+
+connect = {'api': <snappi.snappi.GrpcApi object at 0x7fba43779b00>, 'controller': 'obox0.lbj.is.keysight.com:31859', 'noofdevices': 100, 'noofflows': 8, ...}
+
+    @pytest.fixture(scope='function')
+    def config_n_port_b2b_bgp(connect):
+        api = connect['api']
+        noofports = connect['noofports']
+        noofdevices=connect['noofdevices']
+        noofflows=connect['noofflows']
+        ports = connect['ports']
+        packets = connect['packets']
+        size= connect['size']
+        config = api.config()
+        l1 = config.layer1.layer1()[0]
+        l1.name = "l1"
+        l1.speed = "speed_400_gbps"
+        config_values = {}
+        macs = get_macs("000000000011", 2 * noofdevices)
+        config_values["tx_macs"], config_values["rx_macs"] = macs[::2], macs[1::2]
+        config_values["vlan_ids"] = [str(i) for i in range(1, noofdevices + 1)]
+        ip_adds = get_ip_addresses("10.10.2.1", 2 * noofdevices)
+        config_values["tx_adds"], config_values["rx_adds"] = (
+            ip_adds[::2],
+            ip_adds[1::2],
+        )
+        n = int(noofports/2)
+        l1ports = []
+        for iter in range(0,n):
+            index1 = iter*2+1
+            index2 = iter*2+2
+            p1 = ports[index1]
+            p2 = ports[index2]
+    
+            port1 = config.ports.add(name="port{0}".format(index1), location = p1)
+            port2 = config.ports.add(name="port{0}".format(index2), location = p2)
+            l1ports.append(port1.name)
+            l1ports.append(port2.name)
+            tx_ip_list = []
+            rx_ip_list = []
+    
+            for dev in range(0, noofdevices):
+                d1 = config.devices.device(name="{1}d{0}".format(dev+1,index1))[-1]
+                e1 = d1.ethernets.ethernet(name="{1}eth{0}".format(dev+1,index1))[-1]
+                e1.connection.port_name = port1.name
+                e1.mac =  config_values["tx_macs"][dev - 1]
+                e1.mtu = 1500
+                ip1 = e1.ipv4_addresses.add()
+                ip1.name = "{1}ip{0}".format(dev+1,index1)
+                tx_ip_list.append(ip1.name)
+                ip1.address = config_values["tx_adds"][dev - 1]
+                ip1.gateway = config_values["rx_adds"][dev - 1]
+                ip1.prefix = 24
+                bgp1 = d1.bgp
+                bgp1.router_id = config_values["tx_adds"][dev - 1]
+                bgp1_int = bgp1.ipv4_interfaces.add()
+                bgp1_int.ipv4_name = ip1.name
+                peer1 = bgp1_int.peers.add()
+                peer1.name = "{1}BGP Peer {0}".format(dev+1,index1)
+                peer1.as_type = "ibgp"
+                peer1.peer_address = config_values["rx_adds"][dev - 1]
+                peer1.as_number = 65200
+    
+            for dev in range(0, noofdevices):
+                d2 = config.devices.device(name="{1}d_{0}".format(dev+1,index2))[-1]
+                e2 = d2.ethernets.ethernet(name="{1}eth_{0}".format(dev+1,index2))[-1]
+                e2.connection.port_name = port2.name
+                e2.mac =  config_values["rx_macs"][dev - 1]
+                e2.mtu = 1500
+                ip2 = e2.ipv4_addresses.add()
+                ip2.name = "{1}ip_{0}".format(dev+1,index2)
+                rx_ip_list.append(ip2.name)
+                ip2.address = config_values["rx_adds"][dev - 1]
+                ip2.gateway = config_values["tx_adds"][dev - 1]
+                ip2.prefix = 24
+                bgp2 = d2.bgp
+                bgp2.router_id = config_values["rx_adds"][dev - 1]
+                bgp2_int = bgp2.ipv4_interfaces.add()
+                bgp2_int.ipv4_name = ip2.name
+                peer2 = bgp2_int.peers.add()
+                peer2.name = "{1}BGP Peer_ {0}".format(dev+1,index2)
+                peer2.as_type = "ibgp"
+                peer2.peer_address = config_values["tx_adds"][dev - 1]
+                peer2.as_number = 65200
+        holder = 1
+        for flowindex in range(noofflows):
+            flow = config.flows.add(name=f"flow {flowindex + 1}")
+            flow.tx_rx.device.tx_names = [tx_ip_list[flowindex]]
+            flow.tx_rx.device.rx_names = [rx_ip_list[flowindex]]
+            holder += 1
+            if holder > noofdevices:
+                holder = 1
+            flow.size.fixed = size
+            flow.duration.fixed_packets.packets = packets
+            flow.metrics.enable = True
+    
+        l1.port_names = l1ports
+    
+>       response = api.set_config(config)
+
+tests/conftest.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/lib/python3.6/site-packages/snappi/snappi.py:87677: in set_config
+    res_obj = stub.SetConfig(req_obj, timeout=self._request_timeout)
+../../../.local/lib/python3.6/site-packages/grpc/_channel.py:946: in __call__
+    return _end_unary_response_blocking(state, call, False, None)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+state = <grpc._channel._RPCState object at 0x7fba436998d0>
+call = <grpc._cython.cygrpc.SegregatedCall object at 0x7fba4365b248>
+with_call = False, deadline = None
+
+    def _end_unary_response_blocking(state, call, with_call, deadline):
+        if state.code is grpc.StatusCode.OK:
+            if with_call:
+                rendezvous = _MultiThreadedRendezvous(state, call, None, deadline)
+                return state.response, rendezvous
+            else:
+                return state.response
+        else:
+>           raise _InactiveRpcError(state)
+E           grpc._channel._InactiveRpcError: <_InactiveRpcError of RPC that terminated with:
+E           	status = StatusCode.INTERNAL
+E           	details = "{
+E             "code":  13,
+E             "kind":  "internal",
+E             "errors":  [
+E               "Protocol service for port \"port1\" is not registered",
+E               "Error occurred while setting Protocol config for user common:Protocol service for port \"port2\" is not registered"
+E             ]
+E           }"
+E           	debug_error_string = "{"created":"@1685342708.516872121","description":"Error received from peer ipv4:10.36.71.236:31859","file":"src/core/lib/surface/call.cc","file_line":903,"grpc_message":"{\n  "code":  13,\n  "kind":  "internal",\n  "errors":  [\n    "Protocol service for port \"port1\" is not registered",\n    "Error occurred while setting Protocol config for user common:Protocol service for port \"port2\" is not registered"\n  ]\n}","grpc_status":13}"
+E           >
+
+../../../.local/lib/python3.6/site-packages/grpc/_channel.py:849: _InactiveRpcError
+- generated html file: file:///home/test/remote/test_folder/systemTests/report.html -
+=========================== short test summary info ============================
+ERROR tests/protocols/test_bgp.py::test_can_run_bgp_sessions - grpc._channel....
+=============================== 1 error in 2.87s ===============================
